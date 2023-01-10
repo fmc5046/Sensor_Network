@@ -152,15 +152,18 @@ def decompress_packet(s,ecc_sym):
     #Get the timestamp
     #print(s)
     sucess = False
+    tmp_ecc = 0
     try:
         rsc = RSCodec(ecc_sym)  # ecc symbols
         a = rsc.decode(s)[0]  # original
         sucess = True
+        tmp_ecc = ecc_sym
     except:
         try:
             rsc = RSCodec(36)  # ecc symbols
             a = rsc.decode(s)[0]  # original
             sucess = True
+            tmp_ecc = 36
         except:
             #print(s)
             print("Error Decoding")
@@ -175,10 +178,31 @@ def decompress_packet(s,ecc_sym):
 
         #Now decompress try both for adaptive compression scheme
         decompress = compress_data(a[:-8],'d',"fpzip",1,1,precision=packet_prec)
-        #decompress = compress_data(a[:-8],'d',"gzip",1,1,precision=packet_prec,lvl=1)
+        #decompress = compress_data(a[:-8],'d',"gzip",1,1,precision=packet_prec,lvl=0)
 
-        print(f"{len(decompress)} with decompression level of {packet_prec}")
+        print(f"{len(decompress)} with decompression level of {packet_prec} and ecc of {tmp_ecc}")
     else:
         decompress = []
 
     return decompress
+
+    import struct
+
+def count_bit_differences(a, b):
+    # Convert the floating point numbers to bytes
+    a_bytes = struct.pack('>f', a)
+    b_bytes = struct.pack('>f', b)
+    
+    # Convert the bytes to integers
+    a_int = int.from_bytes(a_bytes, byteorder='big')
+    b_int = int.from_bytes(b_bytes, byteorder='big')
+    
+    # Count the number of differing bits
+    difference = a_int ^ b_int
+    count = 0
+    while difference:
+        count += difference & 1
+        difference >>= 1
+    
+    return count
+

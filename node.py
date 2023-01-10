@@ -103,6 +103,10 @@ class Node:
         self.thresh = 100
         self.thresh2 = 35
         self.thresh3 = 14
+        self.ecc_thresh = 0.5
+
+        self.compress_try_num = 0
+        self.compress_try_thresh = 10
 
         #For Bayes Opt
         self.optimizer = []
@@ -125,6 +129,12 @@ class Node:
         #For ACK mechanism
         self.got_ACK = True
         self.tmp_message = b''
+        self.channel_quality = 0.0
+        self.ACK_count = 0
+        self.ACK_thresh = 300
+
+        self.ecc_sym_low = self.ecc_sym
+        self.ecc_sym_high = 36
 
     def recive(self,read_serial):
         #print(read_serial)
@@ -191,7 +201,6 @@ class Node:
             recived = bytearray(tot)
             self.tot_array = self.tot_array + recived
 
-
         #Add recived packet after its been converted
         if len(self.tot_array) > 180:
             self.recive_data(self.tot_array)
@@ -256,6 +265,8 @@ class Node:
         
         done = False
 
+        self.compress_try_num = 0
+
         if self.precision >= 18:
             self.offset = 30
         else:
@@ -281,7 +292,7 @@ class Node:
             file_size = len(bytes(data))
 
             #Calculate Error
-            size_error = int((self.max_size - file_size)*1)
+            size_error = int((self.max_size - file_size)*1.2)
             #print(f"The size is {self.size} and the max size is {self.max_size} and the file size is {file_size} and the offset is {self.offset} and error is {size_error}")
 
             #Check what action should be taken
@@ -330,6 +341,12 @@ class Node:
                         for i in range(self.size):
                             self.class_data_buffer.pop(0)
                 break
+
+            self.compress_try_num += 1
+            if self.compress_try_num > self.compress_try_thresh:
+                self.compress_try_num = 0
+                self.offset += 10
+
 
     def generate_uncompressed_packet(self):
         if len(self.control_data_buffer) >= 1:
@@ -401,7 +418,7 @@ class Node:
     def init_optimizer(self):
         acq_func_kwargs = {"kappa": 10000}
         optimizer = Optimizer(
-        dimensions=[(1,10000),(1,10000),(1,10000)],
+        dimensions=[(1,10000),(1,10000),(1,10000),(0.0,1.0)],
         base_estimator='rf',
         n_initial_points=200,
         initial_point_generator="grid",
@@ -420,12 +437,13 @@ class Node:
                 print(f"The current len of the buffer is {len(self.class_data_buffer)}")
                 a = self.thresh
                 print(f"With values {a}")
+                print(f"And a channel quality of {float(self.ACK_got)/float(self.number_of_packets)}")
 
                 self.all_choices.append(a)
                 self.all_len_values.append(np.mean(self.len_measurements))
 
                 #And pick new values from optimizer
-                x = [self.thresh,self.thresh2,self.thresh3]
+                x = [self.thresh,self.thresh2,self.thresh3,self.ecc_thresh]
                 y = np.mean(self.len_measurements)
                 print(x)
                 print(y)
@@ -435,7 +453,10 @@ class Node:
                 self.thresh = new[0]
                 self.thresh2 = new[1]
                 self.thresh3 = new[2]
+                self.ecc_thresh = new[3]
 
+                if float(self.ACK_got)/float(self.number_of_packets) > self.ecc_thresh:
+                    self.ecc_sym = self.ecc_sym_high
 
                 if self.thresh > self.thresh2 and self.thresh > self.thresh3 and self.thresh2 > self.thresh3:
                     #Reset test by clearing out the data buffers and number of packets sent
@@ -443,9 +464,11 @@ class Node:
                     self.number_of_packets = 0
                     self.ACK_got = 0
                     self.len_measurements = []
+                    self.class_data_buffer = []
+
                     done = True
                 else:
-                    self.len_measurements = [999999]
+                    self.len_measurements = [9999999]
 
     def pick_new_choices_rand(self):
         if self.number_of_packets >= 500:
@@ -564,15 +587,27 @@ class Node:
 
         return app_data
 
+    def manage_ACK(self):
+        if self.ACK_count > self.ACK_thresh:
+            print("Move on send next")
+            self.got_ACK = True
+            self.ACK_count = 0
+        else:
+            self.ACK_count += 1
+        
+
+
 
     #Main loop outputs message for transmission or for physical use (i.e. sensor data for classifier ect...)
     def run(self):
         
-        if self.id == 0 and self.p1_count > 5:
+        if self.id == 0 and self.p1_count > 2:
             self.generate_data()
             self.generate_packet()
             self.p1_count = 0
         self.p1_count += 1
+
+        self.manage_ACK()
             
         transmit = self.transmit_data()
         use = self.process_recived()

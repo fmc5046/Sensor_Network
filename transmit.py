@@ -2,6 +2,8 @@ from numpy import byte
 import serial
 import time
 import sys
+import matplotlib.pyplot as plt
+from skopt.plots import plot_evaluations
 
 sys.path.append("/home/fred/Lingua_Franca/Playground")
 sys.path.append("/home/fred/Lingua_Franca/Hyrdro")
@@ -11,8 +13,9 @@ from node import Node
 import stream
 import sounddevice as sd
 import numpy as np
+from skopt.plots import plot_evaluations
 
-ser = serial.Serial('/dev/ttyACM2', 1000000, timeout=0.01)
+ser = serial.Serial('/dev/ttyACM0', 1000000, timeout=0.01)
 ser.reset_input_buffer()
 
 #Startup and initialize the object
@@ -23,6 +26,7 @@ node.init_optimizer()
 
 node.real_class_sensor = True
 node.precision = 12
+node.new_try_thresh = 50
 
 loop_time = 0.01
 val = []
@@ -50,9 +54,13 @@ while(node.done == False):
             node.number_of_packets += 1
             ser.write(val)
             
-            if tot_sent > 100:
+            if tot_sent > 100000:
                 node.done = True
 
+                print(node.optimizer.get_result())
+                plot_evaluations(node.optimizer.get_result())
+                plt.show()
+        
         #Read serial and add to recive buffer
         read_serial = ser.readline()
         if len(read_serial) > 1:
@@ -60,13 +68,15 @@ while(node.done == False):
                 if '124 156 143' in read_serial.decode():
                         node.ACK_got += 1
                         node.got_ACK = True
-                        print(float(node.ACK_got)/float(node.number_of_packets))
+
+                        #print(float(node.ACK_got)/float(node.number_of_packets))
                         #node.recive(read_serial)
-        
+                
         #This is where the real sensor gets added
         node.class_sensor.value = mic.get_data()
         node.class_sensor.timestamp = time.time_ns()
         time.sleep(loop_time)
+
 
 print("Test Done")
 
