@@ -25,7 +25,7 @@ node = Node(id)
 node.init_optimizer()
 
 node.real_class_sensor = True
-node.precision = 12
+node.precision = 32
 node.new_try_thresh = 50
 
 loop_time = 0.01

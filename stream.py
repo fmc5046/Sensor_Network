@@ -28,7 +28,7 @@ class Microphone():
         device_list = sd.query_devices()
 
         for d in device_list:
-            if d['name'] == 'U-22: USB Audio (hw:1,0)':
+            if  'U-22: USB Audio' in d['name']:
                 device = d
 
         print(device)
@@ -64,6 +64,8 @@ class Microphone():
         time.sleep(0.01)
         self.stream.stop()
 
+        
+        #return self.b[::1]
         return self.b[::1]
 
 

@@ -13,7 +13,7 @@ import sounddevice as sd
 import numpy as np
 import scipy.io.wavfile as wav
 
-ser = serial.Serial('/dev/ttyACM0', 1000000, timeout=0.01)
+ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.01)
 ser.reset_input_buffer()
 
 loop_time = 0.01
@@ -29,6 +29,7 @@ while(True):
     #Read serial and add to recive buffer
     read_serial = ser.readline()
     if len(read_serial) > 1:
+        print(read_serial)
         node.recive(read_serial)
 
     #Run a loop of the node
@@ -36,7 +37,7 @@ while(True):
 
     #If something has been output for an application, its audio so play it
     clip = out[1]
-    if len(clip) > 10:
+    if len(clip) > 10 and 0:
         print("Got to play audio")
         samplerate = int(44100*1)
         sd.play(clip, samplerate)

@@ -111,6 +111,10 @@ def compress_encode_packet(tmp,precision,time_stamp,data_sqn,rsc):
     #Now compress
     compressed = compress_data(tmp,'c','fpzip',1,1,precision=precision)
     #compressed = compress_data(tmp,'c','gzip',1,1,precision=precision,lvl=1)
+    
+    #recovered = compress_data(compressed,'d','fpzip',1,1,precision=precision)
+    #recovered = compress_data(compressed,'d','gzip',1,1,precision=precision,lvl=1)
+    #calc_ber(tmp,recovered)
 
     #This is where I add the info on the compression value
     ba = bytearray(struct.pack("d", time_stamp))
@@ -186,7 +190,17 @@ def decompress_packet(s,ecc_sym):
 
     return decompress
 
-    import struct
+def calc_ber(original,recovered):
+    count = 0
+    leng = 0
+
+    for i in range(len(original)):
+        count += count_bit_differences(original[i],recovered[i])
+        leng += 64
+
+    print(float(count)/float(leng))
+
+    return count,len
 
 def count_bit_differences(a, b):
     # Convert the floating point numbers to bytes
