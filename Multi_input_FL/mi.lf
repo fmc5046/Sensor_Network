@@ -1,0 +1,91 @@
+target Python {
+    timeout: 10 sec,
+    fast: true,
+    files: [funs.py]
+}
+
+preamble {=
+    xt = list(range(0,10000,1000))
+    yt = list(range(0,10000,1000))   
+=}
+
+reactor Node(num_nodes(10),xi(0),yi(0),bank_index(0)) {
+    
+    preamble{=
+        import random
+        import numpy as np
+        from reedsolo import RSCodec
+        import matplotlib.pyplot as plt
+    =}
+    
+    timer step(0, 1 sec);
+    input[num_nodes] rx;
+    output[num_nodes] tx;
+
+    state a({=[]=});
+    state wf({=[]=});
+    state rsc({=[]=});
+    state x(xi)
+    state y(yi)
+    state index(bank_index)
+    state k(3)
+
+    reaction(startup) {=
+        import funs
+
+        self.a = funs.test()
+        self.a.x = self.xi
+        self.a.y = self.yi
+
+        self.wf = funs.FSK_Generator()
+        self.rsc = self.RSCodec(2)  #Reed Solomon Encoder
+    =}
+    
+    reaction(step) -> tx {=
+        #Send data to each node
+        if(self.random.random()*10 > 6):
+            arr = self.np.random.rand(10)
+            arr[0] = self.index + 0.001
+
+            self.a.msg = arr
+            for i in range(len(tx)):
+                tx[i].set(self.a)
+    =}
+    
+    reaction(rx) {=
+        #This is where I check distances to see if its worth calculating waveform
+        comb = []
+
+        for i in range(len(rx)):
+            if i != self.index and rx[i].is_present:
+                dist = (abs(rx[i].value.x - self.x)**2 + abs(rx[i].value.y - self.y)**2)**(1/2)
+
+                #Generate waveform with noise and multipath
+                bit_array = self.wf.float_to_bit_array(rx[i].value.msg,self.rsc,encode=True)
+                tmp_los,tmp_comb = self.wf.generate_packet_mp_d(bit_array,dist,0)
+                
+                print(f"The message to Node: {self.bank_index} from Node: {i} arrived the distance is {int(dist)} at time {lf.time.logical_elapsed()/1_000_000_000} s and dBm of {self.wf.path_loss(dist,dB=True)}")
+
+                if len(comb) < 2:
+                    comb = tmp_comb
+                else:
+                    comb = self.np.add(comb,tmp_comb)
+                
+        if len(comb) > 2:
+            #Demoduate and recover
+            bits = self.wf.demod(comb,plot=False)
+
+            #Decode the bits with RSC
+            try:
+                decoded_float = self.wf.demod_to_float(bits,self.rsc,encode=True)
+                print(f"Message recived from node: {int(decoded_float[0])}")
+            except:
+                print("Error")
+    =}
+}
+
+main reactor {
+    nodes = new[6] Node(num_nodes = 6, xi = {= xt[bank_index] =},yi = {= yt[bank_index] =});
+    nodes.tx -> interleaved(nodes.rx);
+}
+
